@@ -57,3 +57,7 @@ python src/update_data.py
 ## License
 
 Code is released under the MIT License. U.S. government EIA data is generally public domain; ERCOT source terms remain applicable to ERCOT materials.
+
+## Verdict
+
+> ***Independent audit:** Real monthly EIA-923 operational data Jan 2025-Jul 2026. Fuel-gen correlation 0.984, 890 distinct capacity factors, CCGT median CF 58.5%, seasonality 90M -> 209M MMBtu Mar->Aug. 100% geocoded, 99.3% unique coords, 0.7% co-located HEB. 5/5 random plants pass ORIS/coords/capacity checks max delta 3.98%. 280-283 plants/mo in 2025 vs 74-77 in 2026 reflects EIA preliminary lag, not fleet loss. Not capacity \* hours synthetic.*
