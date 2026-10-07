@@ -1,0 +1,10 @@
+{
+  "as_of_month": "2026-07",
+  "plant_count": 279,
+  "gas_unit_count": 1171,
+  "gas_nameplate_capacity_mw": 69254.0,
+  "gas_summer_capacity_mw": 61572.5,
+  "latest_month_gas_consumed_mcf": 159123786.0,
+  "latest_month_gas_consumed_mmbtu": 161647631.0,
+  "latest_month_net_generation_mwh": 22637202.214
+}

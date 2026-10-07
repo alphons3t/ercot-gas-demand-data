@@ -1,0 +1,27 @@
+{
+  "scope": {
+    "balancing_authority_code": "ERCO",
+    "fuel_codes": [
+      "NG"
+    ]
+  },
+  "capacity_source_title": "Inventory of Operating Generators as of August 2026",
+  "demand_source_title": "EIA-923 Monthly Generation and Fuel Consumption Time Series File, 2026 July",
+  "sources": {
+    "eia_860m": {
+      "sha256": "b4b70abb4c217e8e2658c3bde7608a3d530e86a81279ccc572ced82a200e9f1c",
+      "bytes": 13955142,
+      "url": "https://www.eia.gov/electricity/data/eia860m/xls/august_generator2026.xlsx"
+    },
+    "eia_923": {
+      "sha256": "63199a3dbefda8759d4cfa20e4bbcc650ff5420a8dfc1491a2463d6974fd952c",
+      "bytes": 14398222,
+      "url": "https://www.eia.gov/electricity/data/eia923/xls/f923_2026.zip"
+    }
+  },
+  "source_pages": {
+    "eia_860m": "https://www.eia.gov/electricity/data/eia860m/",
+    "eia_923": "https://www.eia.gov/electricity/data/eia923/",
+    "ercot_capacity_cross_check": "https://www.ercot.com/gridinfo/resource"
+  }
+}
