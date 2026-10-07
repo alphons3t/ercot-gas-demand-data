@@ -5,6 +5,7 @@ An automatically refreshed, plant-level dataset for natural-gas generation in th
 ## Data files
 
 - `data/ercot_gas_plants.csv`: operating gas-fired plant locations and capacity aggregated from generator records. `eia_plant_id_orispl` is the explicit EIA Plant ID/ORISPL key.
+- `data/ercot_gas_generators.csv`: generator-level ORISPL, generator ID, prime mover, technology, nameplate/net capacities, operating year, and planned retirement year.
 - `data/ercot_gas_demand_monthly.csv`: monthly plant gas consumption and net generation, combining the latest complete annual EIA-923 release with the current partial monthly release.
 - `data/ercot_gas_plants_latest.csv`: plant capacity joined to each plant's latest available demand observation. `demand_reporting_status` distinguishes current-month, prior-period, and unmatched records.
 - `data/summary.json`: ERCOT-wide totals for quick use.
@@ -15,6 +16,11 @@ Important units:
 - Capacity is in megawatts (MW).
 - Gas demand is EIA electric-generation fuel consumption in thousand cubic feet (`mcf`) and million British thermal units (`MMBtu`). EIA's source label is `mcf`; in this dataset that means thousand cubic feet.
 - Generation is in megawatt-hours (MWh).
+- `heat_rate_mmbtu_per_mwh` is calculated only when monthly net generation is positive.
+- `capacity_factor` is monthly net generation divided by `capacity_factor_basis_summer_mw` times calendar hours in the month. It uses current EIA-860M capacity, so historical comparisons should be treated cautiously. It is unavailable for demand records that do not match the current gas-capacity inventory.
+- `tech_ccgt_mw`, `tech_ct_mw`, and `tech_steam_mw` allocate generator summer MW using EIA technology labels. Other gas technologies remain in total capacity but not those three normalized buckets.
+- `ercot_footprint` is a geographic flag: Texas is `true`; the Oklahoma ERCO plant is retained and flagged `false`.
+- Every CSV row includes `source_file`, `source_url`, and UTC `retrieved_at` provenance.
 
 ## Update agent
 

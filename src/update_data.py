@@ -9,6 +9,7 @@ import json
 import re
 import tempfile
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
@@ -117,7 +118,7 @@ def clean_number(series: pd.Series) -> pd.Series:
     return pd.to_numeric(cleaned, errors="coerce")
 
 
-def read_capacity(path: Path) -> tuple[pd.DataFrame, str]:
+def read_capacity(path: Path) -> tuple[pd.DataFrame, pd.DataFrame, str]:
     raw = pd.read_excel(path, sheet_name="Operating", header=2, dtype={"Generator ID": str})
     title = pd.read_excel(path, sheet_name="Operating", header=None, nrows=1).iloc[0, 0]
     rows = raw[
@@ -126,7 +127,14 @@ def read_capacity(path: Path) -> tuple[pd.DataFrame, str]:
     ].copy()
     for col in ["Nameplate Capacity (MW)", "Net Summer Capacity (MW)", "Net Winter Capacity (MW)"]:
         rows[col] = clean_number(rows[col])
+    for col in ["Operating Year", "Planned Retirement Year"]:
+        rows[col] = clean_number(rows[col]).astype("Int64")
     rows["Plant ID"] = pd.to_numeric(rows["Plant ID"], errors="raise").astype(int)
+    rows["ercot_footprint"] = rows["Plant State"].eq("TX")
+    technology = rows["Technology"].astype(str)
+    rows["tech_ccgt_mw"] = rows["Net Summer Capacity (MW)"].where(technology.str.contains("Combined Cycle", case=False, na=False), 0)
+    rows["tech_ct_mw"] = rows["Net Summer Capacity (MW)"].where(technology.str.contains("Combustion Turbine", case=False, na=False), 0)
+    rows["tech_steam_mw"] = rows["Net Summer Capacity (MW)"].where(technology.str.contains("Steam Turbine", case=False, na=False), 0)
 
     plants = (
         rows.groupby(["Plant ID", "Plant Name", "County", "Plant State", "Latitude", "Longitude"], dropna=False)
@@ -136,13 +144,27 @@ def read_capacity(path: Path) -> tuple[pd.DataFrame, str]:
             gas_summer_capacity_mw=("Net Summer Capacity (MW)", "sum"),
             gas_winter_capacity_mw=("Net Winter Capacity (MW)", "sum"),
             technologies=("Technology", lambda x: " | ".join(sorted(set(map(str, x.dropna()))))),
+            tech_ccgt_mw=("tech_ccgt_mw", "sum"),
+            tech_ct_mw=("tech_ct_mw", "sum"),
+            tech_steam_mw=("tech_steam_mw", "sum"),
             operator=("Entity Name", "first"),
+            ercot_footprint=("ercot_footprint", "all"),
         )
         .reset_index()
     )
     plants.columns = [re.sub(r"[^a-z0-9]+", "_", str(c).lower()).strip("_") for c in plants.columns]
     plants = plants.rename(columns={"plant_id": "eia_plant_id_orispl"})
-    return plants, str(title)
+    generators = rows[[
+        "Plant ID", "Generator ID", "Prime Mover Code", "Technology",
+        "Nameplate Capacity (MW)", "Net Summer Capacity (MW)", "Net Winter Capacity (MW)",
+        "Operating Year", "Planned Retirement Year", "ercot_footprint",
+    ]].copy()
+    generators.columns = [
+        "orispl", "gen_id", "prime_mover", "technology", "nameplate_mw",
+        "summer_mw", "winter_mw", "operating_year", "retirement_year", "ercot_footprint",
+    ]
+    generators = generators.sort_values(["orispl", "gen_id"])
+    return plants, generators, str(title)
 
 
 def read_demand(path: Path) -> tuple[pd.DataFrame, str]:
@@ -188,22 +210,67 @@ def read_demand(path: Path) -> tuple[pd.DataFrame, str]:
     return demand[["eia_plant_id_orispl", "plant_name", "month", "gas_consumed_mcf", "gas_consumed_mmbtu", "net_generation_mwh"]], str(title)
 
 
-def write_outputs(output_dir: Path, plants: pd.DataFrame, demand: pd.DataFrame, metadata: dict) -> None:
+def write_outputs(
+    output_dir: Path,
+    plants: pd.DataFrame,
+    generators: pd.DataFrame,
+    demand: pd.DataFrame,
+    metadata: dict,
+    retrieved_at: str,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     plants = plants.sort_values(["gas_summer_capacity_mw", "plant_name"], ascending=[False, True])
     demand = demand.sort_values(["month", "plant_name"])
+    demand = demand.merge(
+        plants[["eia_plant_id_orispl", "gas_summer_capacity_mw"]],
+        on="eia_plant_id_orispl",
+        how="left",
+    )
+    demand["heat_rate_mmbtu_per_mwh"] = (
+        demand["gas_consumed_mmbtu"] / demand["net_generation_mwh"]
+    ).where(demand["net_generation_mwh"] > 0)
+    demand["hours_in_month"] = demand["month"].map(lambda value: pd.Period(value, freq="M").days_in_month * 24)
+    demand["capacity_factor"] = (
+        demand["net_generation_mwh"]
+        / (demand["gas_summer_capacity_mw"] * demand["hours_in_month"])
+    ).where(demand["gas_summer_capacity_mw"] > 0)
+    demand = demand.rename(columns={"gas_summer_capacity_mw": "capacity_factor_basis_summer_mw"}).drop(columns=["hours_in_month"])
+    capacity_source = metadata["sources"]["eia_860m"]
+    current_source = metadata["sources"]["eia_923_current"]
+    annual_source = metadata["sources"]["eia_923_prior_final"]
+    plants["source_file"] = Path(capacity_source["url"]).name
+    plants["source_url"] = capacity_source["url"]
+    plants["retrieved_at"] = retrieved_at
+    generators["source_file"] = Path(capacity_source["url"]).name
+    generators["source_url"] = capacity_source["url"]
+    generators["retrieved_at"] = retrieved_at
+    current_year = max(int(value[:4]) for value in demand["month"].dropna())
+    demand["source_file"] = demand["month"].str[:4].astype(int).eq(current_year).map(
+        {True: Path(current_source["url"]).name, False: Path(annual_source["url"]).name}
+    )
+    demand["source_url"] = demand["month"].str[:4].astype(int).eq(current_year).map(
+        {True: current_source["url"], False: annual_source["url"]}
+    )
+    demand["retrieved_at"] = retrieved_at
     latest_month = demand["month"].max() if not demand.empty else None
     current_month = demand[demand["month"] == latest_month].copy() if latest_month else demand.copy()
     latest_by_plant = (
         demand.sort_values("month").drop_duplicates("eia_plant_id_orispl", keep="last")
         if not demand.empty else demand.copy()
     )
-    latest_by_plant = latest_by_plant.drop(columns=["plant_name"]).rename(columns={"month": "demand_as_of_month"})
+    latest_by_plant = latest_by_plant.drop(columns=["plant_name", "retrieved_at"]).rename(columns={
+        "month": "demand_as_of_month",
+        "source_file": "demand_source_file",
+        "source_url": "demand_source_url",
+    })
     combined = plants.merge(latest_by_plant, on="eia_plant_id_orispl", how="left")
+    combined["source_file"] = combined["source_file"] + combined["demand_source_file"].fillna("").map(lambda value: f" | {value}" if value else "")
+    combined["source_url"] = combined["source_url"] + combined["demand_source_url"].fillna("").map(lambda value: f" | {value}" if value else "")
     combined["demand_reporting_status"] = combined["demand_as_of_month"].apply(
         lambda value: "current_month" if value == latest_month else ("latest_annual_or_prior" if pd.notna(value) else "no_eia_923_match")
     )
     plants.to_csv(output_dir / "ercot_gas_plants.csv", index=False, float_format="%.3f")
+    generators.to_csv(output_dir / "ercot_gas_generators.csv", index=False, float_format="%.3f")
     demand.to_csv(output_dir / "ercot_gas_demand_monthly.csv", index=False, float_format="%.3f")
     combined.to_csv(output_dir / "ercot_gas_plants_latest.csv", index=False, float_format="%.3f")
     summary = {
@@ -260,7 +327,7 @@ def main() -> None:
                 raise ValueError("--demand-file and --annual-demand-file must be provided together")
             sources["eia_923_current"] = file_metadata(demand_path, args.demand_source_url)
             sources["eia_923_prior_final"] = file_metadata(annual_demand_path, args.annual_demand_source_url)
-        plants, capacity_title = read_capacity(capacity_path)
+        plants, generators, capacity_title = read_capacity(capacity_path)
         demand_current, demand_title = read_demand(demand_path)
         demand_annual, annual_demand_title = read_demand(annual_demand_path)
         demand = pd.concat([demand_annual, demand_current], ignore_index=True)
@@ -277,7 +344,8 @@ def main() -> None:
                 "ercot_capacity_cross_check": ERCOT_CAPACITY_PAGE,
             },
         }
-        write_outputs(Path(args.output_dir), plants, demand, metadata)
+        retrieved_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        write_outputs(Path(args.output_dir), plants, generators, demand, metadata, retrieved_at)
 
 
 if __name__ == "__main__":
