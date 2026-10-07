@@ -10,19 +10,19 @@
   "annual_demand_source_title": "EIA-923 Monthly Generation and Fuel Consumption Time Series File,  2025 Final Data",
   "sources": {
     "eia_860m": {
+      "url": "https://www.eia.gov/electricity/data/eia860m/xls/august_generator2026.xlsx",
       "sha256": "b4b70abb4c217e8e2658c3bde7608a3d530e86a81279ccc572ced82a200e9f1c",
-      "bytes": 13955142,
-      "url": "https://www.eia.gov/electricity/data/eia860m/xls/august_generator2026.xlsx"
+      "bytes": 13955142
     },
     "eia_923_current": {
+      "url": "https://www.eia.gov/electricity/data/eia923/xls/f923_2026.zip",
       "sha256": "63199a3dbefda8759d4cfa20e4bbcc650ff5420a8dfc1491a2463d6974fd952c",
-      "bytes": 14398222,
-      "url": "https://www.eia.gov/electricity/data/eia923/xls/f923_2026.zip"
+      "bytes": 14398222
     },
     "eia_923_prior_final": {
+      "url": "https://www.eia.gov/electricity/data/eia923/xls/f923_2025.zip",
       "sha256": "1bff7092a86f6678c069c986829da5a23104048fc1aafb65b0776e3c904284de",
-      "bytes": 23340452,
-      "url": "https://www.eia.gov/electricity/data/eia923/xls/f923_2025.zip"
+      "bytes": 23340452
     }
   },
   "source_pages": {
