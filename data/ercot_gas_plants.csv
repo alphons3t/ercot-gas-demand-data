@@ -1,4 +1,4 @@
-plant_id,plant_name,county,plant_state,latitude,longitude,gas_unit_count,gas_nameplate_capacity_mw,gas_summer_capacity_mw,gas_winter_capacity_mw,technologies,operator
+eia_plant_id_orispl,plant_name,county,plant_state,latitude,longitude,gas_unit_count,gas_nameplate_capacity_mw,gas_summer_capacity_mw,gas_winter_capacity_mw,technologies,operator
 55480,Forney Energy Center,Kaufman,TX,32.756,-96.492,8,1894.200,1770.000,1966.000,Natural Gas Fired Combined Cycle,LaFrontera Holdings LLC
 55091,Midlothian Energy Facility,Ellis,TX,32.430,-97.054,6,1734.000,1620.000,1710.000,Natural Gas Fired Combined Cycle,Midlothian Energy LLC
 58001,Temple Power Station,Bell,TX,31.056,-97.317,6,1606.400,1580.000,1580.000,Natural Gas Fired Combined Cycle,Temple Generation Holdings LLC

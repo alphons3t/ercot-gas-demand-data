@@ -4,11 +4,11 @@ An automatically refreshed, plant-level dataset for natural-gas generation in th
 
 ## Data files
 
-- `data/ercot_gas_plants.csv`: operating gas-fired plant locations and capacity aggregated from generator records.
-- `data/ercot_gas_demand_monthly.csv`: monthly plant gas consumption and net generation.
-- `data/ercot_gas_plants_latest.csv`: plant capacity joined to the latest available demand month.
+- `data/ercot_gas_plants.csv`: operating gas-fired plant locations and capacity aggregated from generator records. `eia_plant_id_orispl` is the explicit EIA Plant ID/ORISPL key.
+- `data/ercot_gas_demand_monthly.csv`: monthly plant gas consumption and net generation, combining the latest complete annual EIA-923 release with the current partial monthly release.
+- `data/ercot_gas_plants_latest.csv`: plant capacity joined to each plant's latest available demand observation. `demand_reporting_status` distinguishes current-month, prior-period, and unmatched records.
 - `data/summary.json`: ERCOT-wide totals for quick use.
-- `data/metadata.json`: source files, checksums, scope, and refresh time.
+- `data/metadata.json`: source titles, URLs, checksums, and filter scope.
 
 Important units:
 
@@ -34,14 +34,16 @@ python src/update_data.py
 1. Download the latest [EIA-860M generator inventory](https://www.eia.gov/electricity/data/eia860m/).
 2. Keep operating generators with balancing authority code `ERCO` and energy source code `NG`.
 3. Aggregate generator capacity to the EIA plant ID while retaining location and technology.
-4. Download the latest [EIA-923 monthly plant fuel data](https://www.eia.gov/electricity/data/eia923/).
-5. Keep `ERCO` natural-gas records and aggregate electric-generation fuel consumption by plant and month.
+4. Download both the current partial and latest prior complete [EIA-923 plant fuel datasets](https://www.eia.gov/electricity/data/eia923/).
+5. Keep `ERCO` natural-gas records, aggregate electric-generation fuel consumption by plant and month, and prefer the current release where records overlap.
 6. Track [ERCOT resource-capacity reports](https://www.ercot.com/gridinfo/resource) as an external cross-check.
 
 ## Coverage and limitations
 
 - The repository represents plants assigned by EIA to the ERCOT balancing authority, not every gas generator physically located in Texas.
-- EIA plant-level demand is monthly and published with a lag. Public real-time ERCOT data reports system generation by fuel, not verified plant-level gas consumption. The updater therefore checks daily but only changes demand when EIA publishes new data.
+- EIA plant-level demand is monthly and published with a lag. The current-year monthly file covers only monthly survey respondents; the prior complete annual release fills most smaller-plant gaps. Public real-time ERCOT data does not provide verified plant-level gas consumption.
+- `summary.json` reports site and capacity-weighted demand coverage. A plant's `demand_as_of_month` must be used before comparing plants with different reporting freshness.
+- EIA balancing-authority capacity is not definitionally identical to ERCOT's published market-resource totals. The repository does not present either as a coverage denominator for the other.
 - Capacity is preliminary in EIA-860M and can be revised in later releases.
 - A plant can have non-gas units; capacity here includes only generators whose reported primary energy source is natural gas.
 - CHP fuel use is represented by EIA's quantity consumed for electricity, not total facility fuel use.
@@ -49,4 +51,3 @@ python src/update_data.py
 ## License
 
 Code is released under the MIT License. U.S. government EIA data is generally public domain; ERCOT source terms remain applicable to ERCOT materials.
-

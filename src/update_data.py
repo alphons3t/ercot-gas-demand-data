@@ -69,6 +69,31 @@ def latest_available_download(page_url: str, pattern: str, destination: Path) ->
     raise RuntimeError("No downloadable source file found:\n" + "\n".join(errors[:12]))
 
 
+def latest_available_downloads(page_url: str, pattern: str, destinations: list[Path]) -> list[dict]:
+    results = []
+    errors = []
+    for url in matching_links(page_url, pattern):
+        if len(results) >= len(destinations):
+            break
+        try:
+            payload = get(url, timeout=30)
+            if not payload.startswith(b"PK"):
+                errors.append(f"{url}: response is not an Excel/ZIP file")
+                continue
+            destination = destinations[len(results)]
+            destination.write_bytes(payload)
+            results.append({
+                "url": url,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "bytes": len(payload),
+            })
+        except Exception as exc:
+            errors.append(f"{url}: {exc}")
+    if len(results) != len(destinations):
+        raise RuntimeError("Not enough downloadable source files found:\n" + "\n".join(errors[:12]))
+    return results
+
+
 def download(url: str, destination: Path) -> dict:
     payload = get(url)
     destination.write_bytes(payload)
@@ -116,6 +141,7 @@ def read_capacity(path: Path) -> tuple[pd.DataFrame, str]:
         .reset_index()
     )
     plants.columns = [re.sub(r"[^a-z0-9]+", "_", str(c).lower()).strip("_") for c in plants.columns]
+    plants = plants.rename(columns={"plant_id": "eia_plant_id_orispl"})
     return plants, str(title)
 
 
@@ -156,10 +182,10 @@ def read_demand(path: Path) -> tuple[pd.DataFrame, str]:
         grouped["month"] = f"{year}-{month_number:02d}"
         records.append(grouped)
     if not records:
-        return pd.DataFrame(columns=["plant_id", "plant_name", "month", "gas_consumed_mcf", "gas_consumed_mmbtu", "net_generation_mwh"]), str(title)
+        return pd.DataFrame(columns=["eia_plant_id_orispl", "plant_name", "month", "gas_consumed_mcf", "gas_consumed_mmbtu", "net_generation_mwh"]), str(title)
     demand = pd.concat(records, ignore_index=True)
-    demand = demand.rename(columns={"Plant Id": "plant_id", "Plant Name": "plant_name"})
-    return demand[["plant_id", "plant_name", "month", "gas_consumed_mcf", "gas_consumed_mmbtu", "net_generation_mwh"]], str(title)
+    demand = demand.rename(columns={"Plant Id": "eia_plant_id_orispl", "Plant Name": "plant_name"})
+    return demand[["eia_plant_id_orispl", "plant_name", "month", "gas_consumed_mcf", "gas_consumed_mmbtu", "net_generation_mwh"]], str(title)
 
 
 def write_outputs(output_dir: Path, plants: pd.DataFrame, demand: pd.DataFrame, metadata: dict) -> None:
@@ -167,20 +193,33 @@ def write_outputs(output_dir: Path, plants: pd.DataFrame, demand: pd.DataFrame, 
     plants = plants.sort_values(["gas_summer_capacity_mw", "plant_name"], ascending=[False, True])
     demand = demand.sort_values(["month", "plant_name"])
     latest_month = demand["month"].max() if not demand.empty else None
-    latest = demand[demand["month"] == latest_month].drop(columns=["plant_name"]) if latest_month else demand
-    combined = plants.merge(latest, on="plant_id", how="left")
+    current_month = demand[demand["month"] == latest_month].copy() if latest_month else demand.copy()
+    latest_by_plant = (
+        demand.sort_values("month").drop_duplicates("eia_plant_id_orispl", keep="last")
+        if not demand.empty else demand.copy()
+    )
+    latest_by_plant = latest_by_plant.drop(columns=["plant_name"]).rename(columns={"month": "demand_as_of_month"})
+    combined = plants.merge(latest_by_plant, on="eia_plant_id_orispl", how="left")
+    combined["demand_reporting_status"] = combined["demand_as_of_month"].apply(
+        lambda value: "current_month" if value == latest_month else ("latest_annual_or_prior" if pd.notna(value) else "no_eia_923_match")
+    )
     plants.to_csv(output_dir / "ercot_gas_plants.csv", index=False, float_format="%.3f")
     demand.to_csv(output_dir / "ercot_gas_demand_monthly.csv", index=False, float_format="%.3f")
     combined.to_csv(output_dir / "ercot_gas_plants_latest.csv", index=False, float_format="%.3f")
     summary = {
         "as_of_month": latest_month,
-        "plant_count": int(len(plants)),
+        "capacity_inventory_plant_count": int(len(plants)),
         "gas_unit_count": int(plants["gas_unit_count"].sum()),
         "gas_nameplate_capacity_mw": round(float(plants["gas_nameplate_capacity_mw"].sum()), 3),
         "gas_summer_capacity_mw": round(float(plants["gas_summer_capacity_mw"].sum()), 3),
-        "latest_month_gas_consumed_mcf": round(float(latest["gas_consumed_mcf"].sum()), 3) if latest_month else None,
-        "latest_month_gas_consumed_mmbtu": round(float(latest["gas_consumed_mmbtu"].sum()), 3) if latest_month else None,
-        "latest_month_net_generation_mwh": round(float(latest["net_generation_mwh"].sum()), 3) if latest_month else None,
+        "latest_month_reporting_plant_count": int(current_month["eia_plant_id_orispl"].nunique()) if latest_month else 0,
+        "capacity_plants_with_any_demand_match": int(combined["demand_as_of_month"].notna().sum()),
+        "capacity_site_demand_coverage_pct": round(float(combined["demand_as_of_month"].notna().mean() * 100), 3),
+        "capacity_mw_with_any_demand_match": round(float(combined.loc[combined["demand_as_of_month"].notna(), "gas_summer_capacity_mw"].sum()), 3),
+        "capacity_mw_demand_coverage_pct": round(float(combined.loc[combined["demand_as_of_month"].notna(), "gas_summer_capacity_mw"].sum() / plants["gas_summer_capacity_mw"].sum() * 100), 3),
+        "latest_month_gas_consumed_mcf": round(float(current_month["gas_consumed_mcf"].sum()), 3) if latest_month else None,
+        "latest_month_gas_consumed_mmbtu": round(float(current_month["gas_consumed_mmbtu"].sum()), 3) if latest_month else None,
+        "latest_month_net_generation_mwh": round(float(current_month["net_generation_mwh"].sum()), 3) if latest_month else None,
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -191,13 +230,16 @@ def main() -> None:
     parser.add_argument("--output-dir", default="data")
     parser.add_argument("--capacity-file", type=Path)
     parser.add_argument("--demand-file", type=Path)
+    parser.add_argument("--annual-demand-file", type=Path)
     parser.add_argument("--capacity-source-url")
     parser.add_argument("--demand-source-url")
+    parser.add_argument("--annual-demand-source-url")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory() as directory:
         temp = Path(directory)
         capacity_path = args.capacity_file or temp / "eia860m.xlsx"
-        demand_path = args.demand_file or temp / "eia923.zip"
+        demand_path = args.demand_file or temp / "eia923_current.zip"
+        annual_demand_path = args.annual_demand_file or temp / "eia923_prior_final.zip"
         capacity_url = None
         demand_url = None
         sources = {}
@@ -207,18 +249,27 @@ def main() -> None:
             )
         else:
             sources["eia_860m"] = file_metadata(capacity_path, args.capacity_source_url)
-        if not args.demand_file:
-            sources["eia_923"] = latest_available_download(
-                EIA_923_PAGE, r"/f923_20\d{2}\.zip$", demand_path
+        if not args.demand_file and not args.annual_demand_file:
+            demand_sources = latest_available_downloads(
+                EIA_923_PAGE, r"/f923_20\d{2}\.zip$", [demand_path, annual_demand_path]
             )
+            sources["eia_923_current"] = demand_sources[0]
+            sources["eia_923_prior_final"] = demand_sources[1]
         else:
-            sources["eia_923"] = file_metadata(demand_path, args.demand_source_url)
+            if not args.demand_file or not args.annual_demand_file:
+                raise ValueError("--demand-file and --annual-demand-file must be provided together")
+            sources["eia_923_current"] = file_metadata(demand_path, args.demand_source_url)
+            sources["eia_923_prior_final"] = file_metadata(annual_demand_path, args.annual_demand_source_url)
         plants, capacity_title = read_capacity(capacity_path)
-        demand, demand_title = read_demand(demand_path)
+        demand_current, demand_title = read_demand(demand_path)
+        demand_annual, annual_demand_title = read_demand(annual_demand_path)
+        demand = pd.concat([demand_annual, demand_current], ignore_index=True)
+        demand = demand.sort_values("month").drop_duplicates(["eia_plant_id_orispl", "month"], keep="last")
         metadata = {
             "scope": {"balancing_authority_code": ERCOT_BA_CODE, "fuel_codes": sorted(GAS_FUEL_CODES)},
             "capacity_source_title": capacity_title,
             "demand_source_title": demand_title,
+            "annual_demand_source_title": annual_demand_title,
             "sources": sources,
             "source_pages": {
                 "eia_860m": EIA_860M_PAGE,

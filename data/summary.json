@@ -1,9 +1,14 @@
 {
   "as_of_month": "2026-07",
-  "plant_count": 279,
+  "capacity_inventory_plant_count": 279,
   "gas_unit_count": 1171,
   "gas_nameplate_capacity_mw": 69254.0,
   "gas_summer_capacity_mw": 61572.5,
+  "latest_month_reporting_plant_count": 77,
+  "capacity_plants_with_any_demand_match": 272,
+  "capacity_site_demand_coverage_pct": 97.491,
+  "capacity_mw_with_any_demand_match": 61510.0,
+  "capacity_mw_demand_coverage_pct": 99.898,
   "latest_month_gas_consumed_mcf": 159123786.0,
   "latest_month_gas_consumed_mmbtu": 161647631.0,
   "latest_month_net_generation_mwh": 22637202.214
