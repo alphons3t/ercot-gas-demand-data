@@ -5,19 +5,19 @@
       "NG"
     ]
   },
-  "capacity_source_title": "Inventory of Operating Generators as of September 2026",
-  "demand_source_title": "EIA-923 Monthly Generation and Fuel Consumption Time Series File, 2026 August",
+  "capacity_source_title": "Inventory of Operating Generators as of October 2026",
+  "demand_source_title": "EIA-923 Monthly Generation and Fuel Consumption Time Series File, 2026 September",
   "annual_demand_source_title": "EIA-923 Monthly Generation and Fuel Consumption Time Series File,  2025 Final Data",
   "sources": {
     "eia_860m": {
-      "url": "https://www.eia.gov/electricity/data/eia860m/xls/september_generator2026.xlsx",
-      "sha256": "bcef74e1af991680731aeecfda967f5950db4ce739bb584edd8b8774c7e6da17",
-      "bytes": 14013970
+      "url": "https://www.eia.gov/electricity/data/eia860m/xls/october_generator2026.xlsx",
+      "sha256": "18b37ac0aeb9e78da6fb0733dc857df2ed5c8f33dc506872fac7cdd61ab98a2c",
+      "bytes": 14033583
     },
     "eia_923_current": {
       "url": "https://www.eia.gov/electricity/data/eia923/xls/f923_2026.zip",
-      "sha256": "50ec141c118547dc0219356171476319e45b5ea382446bda617752a5635e4e91",
-      "bytes": 15657353
+      "sha256": "1ae5c1916e59afd9af9f26725d5ea7f538f644cb72143f2ceef62ef2ad72c004",
+      "bytes": 16940606
     },
     "eia_923_prior_final": {
       "url": "https://www.eia.gov/electricity/data/eia923/xls/f923_2025.zip",
